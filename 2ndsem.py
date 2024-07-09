@@ -16,101 +16,135 @@ chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
 
-def assign_grade(total_marks):
+def assign_grade(external_marks,total_marks):
     total_marks = int(total_marks)
-    if 90 <= total_marks <= 100:
-        return 'O'
-    elif 80 <= total_marks <= 89:
-        return 'A+'
-    elif 70 <= total_marks <= 79:
-        return 'A'
-    elif 60 <= total_marks <= 69:
-        return 'B+'
-    elif 55 <= total_marks <= 59:
-        return 'B'
-    elif 50 <= total_marks <= 54:
-        return 'C'
-    elif 40 <= total_marks <= 49:
-        return 'P'
+    external_marks=int(external_marks)
+    if external_marks>=18:
+        if 90 <= total_marks <= 100:
+            return 'O'
+        elif 80 <= total_marks <= 89:
+            return 'A+'
+        elif 70 <= total_marks <= 79:
+            return 'A'
+        elif 60 <= total_marks <= 69:
+            return 'B+'
+        elif 55 <= total_marks <= 59:
+            return 'B'
+        elif 50 <= total_marks <= 54:
+            return 'C'
+        elif 40 <= total_marks <= 49:
+            return 'P'
     else:
-        return 'F'  
+            return 'F'    
     
-def grade_point(total_marks):
+
+def grade_point(external_marks,total_marks):
     total_marks = int(total_marks)
-    if 90 <= total_marks <= 100:
-        return 10
-    elif 80 <= total_marks <= 89:
-        return 9
-    elif 70 <= total_marks <= 79:
-        return 8
-    elif 60 <= total_marks <= 69:
-        return 7
-    elif 55 <= total_marks <= 59:
-        return 6
-    elif 50 <= total_marks <= 54:
-        return 5
-    elif 40 <= total_marks <= 49:
-        return 4
+    external_marks = int(external_marks)
+    if external_marks>=18:
+        if 90 <= total_marks <= 100:
+            return 10
+        elif 80 <= total_marks <= 89:
+            return 9
+        elif 70 <= total_marks <= 79:
+            return 8
+        elif 60 <= total_marks <= 69:
+            return 7
+        elif 55 <= total_marks <= 59:
+            return 6
+        elif 50 <= total_marks <= 54:
+            return 5
+        elif 40 <= total_marks <= 49:
+            return 4
     else:
-        return 0  
+        return 0
+
+def classify_sgpa(external_marks, percentage):
+    if any(mark < 18 for mark in external_marks):
+        return "Fail"
+    if percentage <= 60:
+        return "Second Class"
+    elif percentage <= 69:
+        return "First Class"
+    elif percentage >= 70:
+        return "Distinction"
+   
 
 def process_and_save_data(data, filename, credit_points):
     formatted_data = []
-    
+
     for (student_name, usn), group in pd.DataFrame(data).groupby(['USN', 'Student Name']):
         formatted_row = {'USN': usn.strip(': '), 'Student Name': student_name.strip(': ')}
         total_credits = 0
         weighted_sum = 0
-        
+        total_internal_marks = 0
+        total_external_marks = 0
+        total_max_marks = 0
+        external_marks_list = []
         for subject_code in sorted(group['Subject Code'].unique()):
             subject_group = group[group['Subject Code'] == subject_code]
-            internal_marks = subject_group['Internal Marks'].iloc[0]
-            external_marks = subject_group['External Marks'].iloc[0]
-            total_marks = subject_group['Total Marks'].iloc[0]
-            grade = assign_grade(total_marks)
-            gradepoint = grade_point(total_marks)
+            internal_marks = int(subject_group['Internal Marks'].iloc[0])
+            external_marks = int(subject_group['External Marks'].iloc[0])
+            total_marks = int(subject_group['Total Marks'].iloc[0])
+            grade = assign_grade(external_marks,total_marks)
+            gradepoint = grade_point(external_marks,total_marks)
+
+
             
             credit = int(credit_points[subject_code])
             total_credits += credit
             weighted_sum += gradepoint * credit
-            
+
             formatted_row[f'{subject_code} CIE'] = internal_marks
             formatted_row[f'{subject_code} SEE'] = external_marks
             formatted_row[f'{subject_code} Total'] = total_marks
             formatted_row[f'{subject_code} Grade'] = grade
             formatted_row[f'{subject_code} Grade Point'] = gradepoint
-            
+
+            total_internal_marks += internal_marks
+            total_external_marks += external_marks
+            total_max_marks += 100  # Assuming each subject is out of 100 marks
+            external_marks_list.append(external_marks)
+
         sgpa = weighted_sum / total_credits
+        percentage = (sgpa - 0.75) * 10
+        class_result = classify_sgpa(external_marks_list, percentage)
+
         formatted_row['SGPA'] = round(sgpa, 2)
+        formatted_row['Percentage'] = round(percentage, 2)
+        formatted_row['Class'] = class_result
+
         formatted_data.append(formatted_row)
-        
+
     final_df = pd.DataFrame(formatted_data)
-    
+
     with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
         final_df.to_excel(writer, index=False, sheet_name='Sheet1', startrow=1)
 
         workbook = writer.book
         worksheet = writer.sheets['Sheet1']
-        
+
         columns = ['USN', 'Student Name']
         subject_codes = sorted({col.split(' ')[0] for col in final_df.columns if col.endswith('CIE')})
         for subject_code in subject_codes:
             columns.extend([subject_code, '', '', '', ''])
-        columns.append('SGPA')
-        
+        columns.extend(['SGPA', 'Percentage', 'Class'])
+
         header1 = columns
-        header2 = [''] * 2 + ['CIE', 'SEE', 'Total', 'Grade', 'Grade Point'] * len(subject_codes) + ['']
-        
+        header2 = [''] * 2 + ['CIE', 'SEE', 'Total', 'Grade', 'Grade Point'] * len(subject_codes) + ['', '', '']
+
         for col_num, value in enumerate(header1):
             worksheet.write(0, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
-        
+
         for col_num, value in enumerate(header2):
             worksheet.write(1, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
-        
-        for i in range(2, len(columns) - 1, 5):
+
+        for i in range(2, len(columns) - 3, 5):
             worksheet.merge_range(0, i, 0, i+4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
 
     print(f"Data saved to {filename}")
+
+
 
 def process_captcha(image_path):
     captcha = Image.open(image_path)
