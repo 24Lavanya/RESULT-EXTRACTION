@@ -13,7 +13,7 @@ from selenium.common.exceptions import NoAlertPresentException, TimeoutException
 import json
 
 # Correct path to the ChromeDriver executable
-chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = r"C:\chromedriver-win64\chromedriver-win64\chromedriver.exe"
 
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
@@ -122,6 +122,7 @@ def process_and_save_data(data, filename, credit_points):
             credit = int(credit_points.get(subject_code, 0))  # Default to 0 if not found
             total_credits += credit
             weighted_sum += gradepoint * credit
+            
 
             if fetch_optional(excluded_subject_codes, subject_code):
                 formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} CIE'] = internal_marks
@@ -330,6 +331,7 @@ def main():
     
     with open('22credits.json', 'r') as f:
         credit_points = json.load(f)
+    print(credit_points)
 
     fetch_and_process_data(usn_list, filename, credit_points)
 
