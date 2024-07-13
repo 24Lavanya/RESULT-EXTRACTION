@@ -26,10 +26,13 @@ def assign_grade(subject_code, internal_marks, external_marks, total_marks):
     if subject_code != "BSCK307" and subject_code != "BNSK359" and subject_code != "BPEK359" and subject_code != "BYOK359":
         if external_marks >= 18 and internal_marks >= 18:
             return grade_letter(total_marks)
+        else:
+            return 'F'
     else:
-        if total_marks >= 18:
+        if internal_marks >= 18:
             return grade_letter(total_marks)
-    return 'F'
+        else:
+            return 'F'
 
 def grade_letter(total_marks):
     if 90 <= total_marks <= 100:
@@ -46,7 +49,8 @@ def grade_letter(total_marks):
         return 'C'
     elif 40 <= total_marks <= 49:
         return 'P'
-    return 'F'
+    
+
 def grade_point(subject_code, internal_marks, external_marks, total_marks):
     total_marks = int(total_marks)
     external_marks = int(external_marks)
@@ -55,10 +59,13 @@ def grade_point(subject_code, internal_marks, external_marks, total_marks):
     if subject_code != "BSCK307" and subject_code != "BNSK359" and subject_code != "BPEK359" and subject_code != "BYOK359":
         if external_marks >= 18 and internal_marks >= 18:
             return calculate_grade_point(total_marks)
+        else:
+            return 0
     else:
         if internal_marks >= 18:
             return calculate_grade_point(total_marks)
-    return 0
+        else:
+            return 0
 
 def calculate_grade_point(total_marks):
     if 90 <= total_marks <= 100:
@@ -75,26 +82,46 @@ def calculate_grade_point(total_marks):
         return 5
     elif 40 <= total_marks <= 49:
         return 4
-    return 0
 
-def classify_sgpa(subject_code, internal_marks, external_marks, percentage):
-    if subject_code != "BSCK307" and subject_code != "BNSK359" and subject_code != "BPEK359" and subject_code != "BYOK359" :    
-        if any(mark < 18 for mark in external_marks) or any(mark < 18 for mark in internal_marks):
+# def classify_sgpa(subject_code, internal_marks, external_marks, percentage):
+#     if subject_code != "BSCK307" and subject_code != "BNSK359" and subject_code != "BPEK359" and subject_code != "BYOK359" :    
+#         if any(mark < 18 for mark in external_marks) or any(mark < 18 for mark in internal_marks):
+#             return "Fail"
+#     else:
+#         if any(mark < 18 for mark in internal_marks):
+#             return "Fail"
+    
+#         if percentage <= 60:
+#             return "Second Class"
+#         elif percentage <= 69:
+#             return "First Class"
+#         elif percentage >= 70:
+#             return "Distinction"
+
+
+def classify_sgpa(subject_code,external_marks,internal_marks, percentage):
+    if subject_code != "BSCK307" and subject_code != "BNSK359" and subject_code != "BPEK359" and subject_code != "BYOK359" :
+        if any(mark < 18 for mark in external_marks) and any(mark < 18 for mark in internal_marks):
             return "Fail"
+        elif percentage <= 60:
+            return "Second Class"
+        elif percentage <= 69:
+            return "First Class"
+        elif percentage >= 70:
+            return "Distinction"
+        
     else:
         if any(mark < 18 for mark in internal_marks):
             return "Fail"
+        elif percentage <= 60:
+            return "Second Class"
+        elif percentage <= 69:
+            return "First Class"
+        elif percentage >= 70:
+            return "Distinction"
+        
     
-    if percentage <= 60:
-        return "Second Class"
-    elif percentage <= 69:
-        return "First Class"
-    elif percentage >= 70:
-        return "Distinction"
-
-def fetch_optional(excluded_subject_codes, subject_code):
-    return subject_code in excluded_subject_codes
-
+    
 # def process_and_save_data(data, filename, credit_points):
 #     excluded_subject_codes = {'BNSK359', 'BPEK359', 'BYOK359'}
 
@@ -199,7 +226,10 @@ def process_and_save_data(data, filename, credit_points):
         external_marks_list = []
         internal_marks_list = []
 
-        
+        unified_course_code = 'BNSK359/BPEK359/BYOK359'
+
+        unified_course_data = {'CIE': 0, 'SEE': 0, 'Total': 0, 'Grade': 'F', 'Grade Point': 0}
+
         for subject_code in sorted(group['Subject Code'].unique()):
             subject_group = group[group['Subject Code'] == subject_code]
             internal_marks = int(subject_group['Internal Marks'].iloc[0])
@@ -207,7 +237,6 @@ def process_and_save_data(data, filename, credit_points):
             total_marks = int(subject_group['Total Marks'].iloc[0])
             grade = assign_grade(subject_code, internal_marks, external_marks, total_marks)
             gradepoint = grade_point(subject_code, internal_marks, external_marks, total_marks)
-
 
             if subject_code in credit_points:
                 credit = int(credit_points[subject_code])
@@ -217,27 +246,40 @@ def process_and_save_data(data, filename, credit_points):
                         if subject_code in key.split('/'):
                             credit = int(credit_points[key])
                             subject_code = key
-                            print("sub:",key)
+                            print("sub:", key)
                             break
-                        #004-pek  003-yok 002-nss
+
             total_credits += credit
             weighted_sum += gradepoint * credit
 
-            formatted_row[f'{subject_code} CIE'] = internal_marks
-            formatted_row[f'{subject_code} SEE'] = external_marks
-            formatted_row[f'{subject_code} Total'] = total_marks
-            formatted_row[f'{subject_code} Grade'] = grade
-            formatted_row[f'{subject_code} Grade Point'] = gradepoint
+            if subject_code in ['BNSK359', 'BPEK359', 'BYOK359']:
+                unified_course_data['CIE'] = internal_marks
+                unified_course_data['SEE'] = external_marks
+                unified_course_data['Total'] = total_marks
+                unified_course_data['Grade'] = grade
+                unified_course_data['Grade Point'] = gradepoint
+            else:
+                formatted_row[f'{subject_code} CIE'] = internal_marks
+                formatted_row[f'{subject_code} SEE'] = external_marks
+                formatted_row[f'{subject_code} Total'] = total_marks
+                formatted_row[f'{subject_code} Grade'] = grade
+                formatted_row[f'{subject_code} Grade Point'] = gradepoint
 
             total_internal_marks += internal_marks
             total_external_marks += external_marks
             total_max_marks += 100
             external_marks_list.append(external_marks)
 
+        # # Add unified course data to the row
+        # formatted_row[f'{unified_course_code} CIE'] = unified_course_data['CIE']
+        # formatted_row[f'{unified_course_code} SEE'] = unified_course_data['SEE']
+        # formatted_row[f'{unified_course_code} Total'] = unified_course_data['Total']
+        # formatted_row[f'{unified_course_code} Grade'] = unified_course_data['Grade']
+        # formatted_row[f'{unified_course_code} Grade Point'] = unified_course_data['Grade Point']
+
         sgpa = weighted_sum / total_credits
         percentage = (sgpa - 0.75) * 10
         class_result = classify_sgpa(subject_code, internal_marks_list, external_marks_list, percentage)
-
 
         formatted_row['SGPA'] = round(sgpa, 2)
         formatted_row['Percentage'] = round(percentage, 2)
@@ -272,6 +314,7 @@ def process_and_save_data(data, filename, credit_points):
             worksheet.merge_range(0, i, 0, i+4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
 
     print(f"Data saved to {filename}")
+
 
 def process_captcha(image_path):
     # Load the image
