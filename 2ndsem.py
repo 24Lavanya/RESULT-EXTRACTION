@@ -11,8 +11,7 @@ from selenium.common.exceptions import NoAlertPresentException, TimeoutException
 import json
 
 # Correct path to the ChromeDriver executable
-# chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
-chrome_driver_path = r"C:\chromedriver-win64\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
 
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)

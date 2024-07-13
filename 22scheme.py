@@ -13,7 +13,7 @@ from selenium.common.exceptions import NoAlertPresentException, TimeoutException
 import json
 
 # Correct path to the ChromeDriver executable
-chrome_driver_path = r"C:\chromedriver-win64\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
 
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
@@ -95,9 +95,98 @@ def classify_sgpa(subject_code, internal_marks, external_marks, percentage):
 def fetch_optional(excluded_subject_codes, subject_code):
     return subject_code in excluded_subject_codes
 
-def process_and_save_data(data, filename, credit_points):
-    excluded_subject_codes = {'BNSK359', 'BPEK359', 'BYOK359'}
+# def process_and_save_data(data, filename, credit_points):
+#     excluded_subject_codes = {'BNSK359', 'BPEK359', 'BYOK359'}
 
+#     formatted_data = []
+
+#     for (student_name, usn), group in pd.DataFrame(data).groupby(['USN', 'Student Name']):
+#         formatted_row = {'USN': usn.strip(': '), 'Student Name': student_name.strip(': ')}
+#         total_credits = 0
+#         weighted_sum = 0
+#         total_internal_marks = 0
+#         total_external_marks = 0
+#         total_max_marks = 0
+#         external_marks_list = []
+#         internal_marks_list = []
+
+#         for subject_code in sorted(group['Subject Code'].unique()):
+#             subject_group = group[group['Subject Code'] == subject_code]
+#             internal_marks = int(subject_group['Internal Marks'].iloc[0])
+#             external_marks = int(subject_group['External Marks'].iloc[0])
+#             total_marks = int(subject_group['Total Marks'].iloc[0])
+
+#             grade = assign_grade(subject_code, internal_marks, external_marks, total_marks)
+#             gradepoint = grade_point(subject_code, internal_marks, external_marks, total_marks)
+
+#             credit = int(credit_points.get(subject_code, 0))  # Default to 0 if not found
+#             total_credits += credit
+#             weighted_sum += gradepoint * credit
+            
+
+#             if fetch_optional(excluded_subject_codes, subject_code):
+#                 formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} CIE'] = internal_marks
+#                 formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} SEE'] = external_marks
+#                 formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} Total'] = total_marks
+#                 formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} Grade'] = grade
+#                 formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} Grade Point'] = gradepoint
+#             else:
+#                 formatted_row[f'{subject_code} CIE'] = internal_marks
+#                 formatted_row[f'{subject_code} SEE'] = external_marks
+#                 formatted_row[f'{subject_code} Total'] = total_marks
+#                 formatted_row[f'{subject_code} Grade'] = grade
+#                 formatted_row[f'{subject_code} Grade Point'] = gradepoint
+
+#             total_internal_marks += internal_marks
+#             total_external_marks += external_marks
+#             total_max_marks += 100  # Assuming each subject is out of 100 marks
+#             external_marks_list.append(external_marks)
+#             internal_marks_list.append(internal_marks)
+
+#         sgpa = weighted_sum / total_credits
+#         percentage = (sgpa - 0.75) * 10
+#         class_result = classify_sgpa(subject_code, internal_marks_list, external_marks_list, percentage)
+
+#         formatted_row['SGPA'] = round(sgpa, 2)
+#         formatted_row['Percentage'] = round(percentage, 2)
+#         formatted_row['Class'] = class_result
+
+#         formatted_data.append(formatted_row)
+
+#     final_df = pd.DataFrame(formatted_data)
+
+#     with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+#         final_df.to_excel(writer, index=False, sheet_name='Sheet1', startrow=1)
+
+#         workbook = writer.book
+#         worksheet = writer.sheets['Sheet1']
+
+#         columns = ['USN', 'Student Name']
+#         subject_codes = sorted({col.split(' ')[0] for col in final_df.columns if col.endswith('CIE')})
+#         for subject_code in subject_codes:
+#             if fetch_optional(excluded_subject_codes, subject_code):
+#                 columns.extend([f'BNSK359/BPEK359/BYOK359 {subject_code}', '', '', '', ''])
+#             else:
+#                 columns.extend([subject_code, '', '', '', ''])
+#         columns.extend(['SGPA', 'Percentage', 'Class'])
+
+#         header1 = columns
+#         header2 = [''] * 2 + ['CIE', 'SEE', 'Total', 'Grade', 'Grade Point'] * len(subject_codes) + ['', '', '']
+
+#         for col_num, value in enumerate(header1):
+#             worksheet.write(0, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+
+#         for col_num, value in enumerate(header2):
+#             worksheet.write(1, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+
+#         for i in range(2, len(columns) - 3, 5):
+#             worksheet.merge_range(0, i, 0, i + 4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+
+#     print(f"Data saved to {filename}")
+
+
+
+def process_and_save_data(data, filename, credit_points):
     formatted_data = []
 
     for (student_name, usn), group in pd.DataFrame(data).groupby(['USN', 'Student Name']):
@@ -110,42 +199,45 @@ def process_and_save_data(data, filename, credit_points):
         external_marks_list = []
         internal_marks_list = []
 
+        
         for subject_code in sorted(group['Subject Code'].unique()):
             subject_group = group[group['Subject Code'] == subject_code]
             internal_marks = int(subject_group['Internal Marks'].iloc[0])
             external_marks = int(subject_group['External Marks'].iloc[0])
             total_marks = int(subject_group['Total Marks'].iloc[0])
-
             grade = assign_grade(subject_code, internal_marks, external_marks, total_marks)
             gradepoint = grade_point(subject_code, internal_marks, external_marks, total_marks)
 
-            credit = int(credit_points.get(subject_code, 0))  # Default to 0 if not found
+
+            if subject_code in credit_points:
+                credit = int(credit_points[subject_code])
+            else:
+                for key in credit_points.keys():
+                    if '/' in key:
+                        if subject_code in key.split('/'):
+                            credit = int(credit_points[key])
+                            subject_code = key
+                            print("sub:",key)
+                            break
+                        #004-pek  003-yok 002-nss
             total_credits += credit
             weighted_sum += gradepoint * credit
-            
 
-            if fetch_optional(excluded_subject_codes, subject_code):
-                formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} CIE'] = internal_marks
-                formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} SEE'] = external_marks
-                formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} Total'] = total_marks
-                formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} Grade'] = grade
-                formatted_row[f'BNSK359/BPEK359/BYOK359 {subject_code} Grade Point'] = gradepoint
-            else:
-                formatted_row[f'{subject_code} CIE'] = internal_marks
-                formatted_row[f'{subject_code} SEE'] = external_marks
-                formatted_row[f'{subject_code} Total'] = total_marks
-                formatted_row[f'{subject_code} Grade'] = grade
-                formatted_row[f'{subject_code} Grade Point'] = gradepoint
+            formatted_row[f'{subject_code} CIE'] = internal_marks
+            formatted_row[f'{subject_code} SEE'] = external_marks
+            formatted_row[f'{subject_code} Total'] = total_marks
+            formatted_row[f'{subject_code} Grade'] = grade
+            formatted_row[f'{subject_code} Grade Point'] = gradepoint
 
             total_internal_marks += internal_marks
             total_external_marks += external_marks
-            total_max_marks += 100  # Assuming each subject is out of 100 marks
+            total_max_marks += 100
             external_marks_list.append(external_marks)
-            internal_marks_list.append(internal_marks)
 
         sgpa = weighted_sum / total_credits
         percentage = (sgpa - 0.75) * 10
         class_result = classify_sgpa(subject_code, internal_marks_list, external_marks_list, percentage)
+
 
         formatted_row['SGPA'] = round(sgpa, 2)
         formatted_row['Percentage'] = round(percentage, 2)
@@ -164,10 +256,7 @@ def process_and_save_data(data, filename, credit_points):
         columns = ['USN', 'Student Name']
         subject_codes = sorted({col.split(' ')[0] for col in final_df.columns if col.endswith('CIE')})
         for subject_code in subject_codes:
-            if fetch_optional(excluded_subject_codes, subject_code):
-                columns.extend([f'BNSK359/BPEK359/BYOK359 {subject_code}', '', '', '', ''])
-            else:
-                columns.extend([subject_code, '', '', '', ''])
+            columns.extend([subject_code, '', '', '', ''])
         columns.extend(['SGPA', 'Percentage', 'Class'])
 
         header1 = columns
@@ -180,7 +269,7 @@ def process_and_save_data(data, filename, credit_points):
             worksheet.write(1, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
 
         for i in range(2, len(columns) - 3, 5):
-            worksheet.merge_range(0, i, 0, i + 4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+            worksheet.merge_range(0, i, 0, i+4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
 
     print(f"Data saved to {filename}")
 

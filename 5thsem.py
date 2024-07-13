@@ -18,11 +18,10 @@ chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
 
-def assign_grade(internal_marks, external_marks, total_marks):
+def assign_grade(external_marks,total_marks):
     total_marks = int(total_marks)
-    external_marks = int(external_marks)
-    internal_marks = int(internal_marks)
-    if external_marks >= 18 and internal_marks >= 18:
+    external_marks=int(external_marks)
+    if external_marks>=18:
         if 90 <= total_marks <= 100:
             return 'O'
         elif 80 <= total_marks <= 89:
@@ -38,13 +37,13 @@ def assign_grade(internal_marks, external_marks, total_marks):
         elif 40 <= total_marks <= 49:
             return 'P'
     else:
-        return 'F'
+            return 'F'    
+    
 
-def grade_point(internal_marks, external_marks, total_marks):
+def grade_point(external_marks,total_marks):
     total_marks = int(total_marks)
     external_marks = int(external_marks)
-    internal_marks = int(internal_marks)
-    if external_marks >= 18 and internal_marks >= 18:
+    if external_marks>=18:
         if 90 <= total_marks <= 100:
             return 10
         elif 80 <= total_marks <= 89:
@@ -62,8 +61,8 @@ def grade_point(internal_marks, external_marks, total_marks):
     else:
         return 0
 
-def classify_sgpa(internal_marks, external_marks, percentage):
-    if (any(mark < 18 for mark in external_marks)) or (any(mark < 18 for mark in internal_marks)):
+def classify_sgpa(external_marks, percentage):
+    if any(mark < 18 for mark in external_marks):
         return "Fail"
     if percentage <= 60:
         return "Second Class"
@@ -71,6 +70,7 @@ def classify_sgpa(internal_marks, external_marks, percentage):
         return "First Class"
     elif percentage >= 70:
         return "Distinction"
+   
 
 def process_and_save_data(data, filename, credit_points):
     formatted_data = []
@@ -83,17 +83,17 @@ def process_and_save_data(data, filename, credit_points):
         total_external_marks = 0
         total_max_marks = 0
         external_marks_list = []
-        internal_marks_list = []
-
         for subject_code in sorted(group['Subject Code'].unique()):
             subject_group = group[group['Subject Code'] == subject_code]
             internal_marks = int(subject_group['Internal Marks'].iloc[0])
             external_marks = int(subject_group['External Marks'].iloc[0])
             total_marks = int(subject_group['Total Marks'].iloc[0])
-            grade = assign_grade(internal_marks, external_marks, total_marks)
-            gradepoint = grade_point(internal_marks, external_marks, total_marks)
+            grade = assign_grade(external_marks,total_marks)
+            gradepoint = grade_point(external_marks,total_marks)
 
-            credit = int(credit_points.get(subject_code, 0))  # Default to 0 if not found
+
+            
+            credit = int(credit_points[subject_code])
             total_credits += credit
             weighted_sum += gradepoint * credit
 
@@ -107,11 +107,10 @@ def process_and_save_data(data, filename, credit_points):
             total_external_marks += external_marks
             total_max_marks += 100  # Assuming each subject is out of 100 marks
             external_marks_list.append(external_marks)
-            internal_marks_list.append(internal_marks)
 
         sgpa = weighted_sum / total_credits
         percentage = (sgpa - 0.75) * 10
-        class_result = classify_sgpa(internal_marks_list, external_marks_list, percentage)
+        class_result = classify_sgpa(external_marks_list, percentage)
 
         formatted_row['SGPA'] = round(sgpa, 2)
         formatted_row['Percentage'] = round(percentage, 2)
@@ -143,7 +142,7 @@ def process_and_save_data(data, filename, credit_points):
             worksheet.write(1, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
 
         for i in range(2, len(columns) - 3, 5):
-            worksheet.merge_range(0, i, 0, i + 4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+            worksheet.merge_range(0, i, 0, i+4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
 
     print(f"Data saved to {filename}")
 
@@ -188,6 +187,7 @@ def process_captcha(image_path):
         
     return captcha_text.replace(" ", "").replace("\n", "")
 
+
 def fetch_and_process_data(usn_list, filename, credit_points):
     all_data = []
     driver = webdriver.Chrome(service=service)
@@ -201,70 +201,103 @@ def fetch_and_process_data(usn_list, filename, credit_points):
             element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[1]/div/input""")
             element.send_keys(usn)
             
-            captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[1]/img""")
-            captcha_src = captcha_element.get_attribute('src')
-            driver.get(captcha_src)
+            captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""") #CAPTCHA PATH IS CORRRECT IMAGE COPY FULL XPATH
+            captcha_element.screenshot("./Captcha/captcha.png")
 
-            with open(r'./Captcha/captcha.png', 'wb') as f:
-                f.write(driver.find_element(By.XPATH, """/html/body/img""").screenshot_as_png)
-                
-            driver.back()
-            captcha_text = process_captcha(r'./Captcha/captcha.png')
-            print(f"The Captcha Text detected was: {captcha_text}")
+            captcha_text = process_captcha("./Captcha/captcha.png")
+            print(f"Extracted Captcha Text: {captcha_text}")
+
+            if len(captcha_text) != 6:
+                print("Captcha text length is not 6, retrying...")
+                continue
+
+            captcha_input = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[1]/input""")
             
-            captcha_input_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/input""")
-            captcha_input_element.send_keys(captcha_text)
-            
-            driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[3]/button""").click()
-            
+            captcha_input.send_keys(captcha_text)
+
+            submit_button = driver.find_element(By.XPATH, """//*[@id="submit"]""")
+            submit_button.click()
+
             try:
-                WebDriverWait(driver, 3).until(EC.alert_is_present())
                 alert = driver.switch_to.alert
-                print(f"Alert Detected, meaning that Captcha and USN was invalid, retrying")
-                alert.accept()
-                repeat = True
-            except (NoAlertPresentException, TimeoutException):
-                repeat = False
+                if alert.text == "University Seat Number is not available or Invalid..!":
+                    alert.accept()
+                    repeat = False
+                    break
+                elif alert.text == "Invalid captcha code !!!":
+                    alert.accept()
+                    continue
+            except NoAlertPresentException:
+                pass
 
-        name = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div/span""").text
-        usn_number = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[2]/div[2]/div/span""").text
+            try:
+                element = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]'))  #SAME AS STUDENT USN CELL FULL XPATH
+                )                                               
+            except TimeoutException:
+                continue
+            
+            usn_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]')  
 
-        data = driver.find_elements(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div[1]/div[3]/div/div/div""")
-        individual_data = []
+            stud_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[2]/td[2]') # PANEL BODY-->TABLE-->2ND TR MEIN 2ND TD JAHA NAME HAI
+                                                        
+            table_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div')  #DIVTABLEBODY
 
-        for subject in data:
-            rows = subject.find_elements(By.XPATH, "./div")
-            if len(rows) >= 8:
-                subject_code = rows[1].text
-                subject_name = rows[2].text
-                external_marks = rows[3].text
-                internal_marks = rows[4].text
-                total_marks = rows[5].text
 
-                individual_data.append({
-                    'USN': usn_number,
-                    'Student Name': name,
-                    'Subject Code': subject_code,
-                    'Subject Name': subject_name,
-                    'External Marks': external_marks,
-                    'Internal Marks': internal_marks,
-                    'Total Marks': total_marks
-                })
+            # print("Stud",stud_element)
+            # print("usn",usn_element)
+            # print("table",table_element)                                          
+            #                                    
+            sub_elements = table_element.find_elements(By.XPATH, 'div')
+            num_sub_elements = len(sub_elements)
+            print("No of elements:",num_sub_elements) 
+            stud_text = stud_element.text
+            usn_text = usn_element.text
+            subjects = []
+            for i in range(2, num_sub_elements + 1):
+                subject = {
+                    'Student Name': stud_text,
+                    'USN': usn_text,
+                    'Subject Code': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[1]').text,
+                    
+                    'Internal Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[3]').text,          #IN DIVTABLEROW WHERE THERE IS FIRST INTERNAL MARKS
+                                                                                      
+                    'External Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[4]').text,              #IN DIVTABLEROW WHERE THERE IS FIRST External MARKS
+                                                                  
+                    'Total Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[5]').text                  #IN DIVTABLEROW WHERE THERE IS FIRST total MARKS
+                }
+                subjects.append(subject)
 
-        all_data.extend(individual_data)
-        time.sleep(3)
+            print(f"Extracted subjects for USN {usn}: {subjects}")
+            all_data.extend(subjects)
 
-    process_and_save_data(all_data, filename, credit_points)
+            repeat = False
+
     driver.quit()
 
+    if all_data:
+        process_and_save_data(all_data, filename, credit_points)
+    else:
+        print("No data extracted, so no file created.")
+
 def main():
-    with open('usn_list.json') as f:
-        usn_list = json.load(f)
-        
-    with open('course_credits.json') as f:
+    start_usn = input("Enter the starting USN (e.g., 4CB21CS001): ")
+    end_usn = input("Enter the ending USN (e.g., 4CB21CS126): ")
+
+    prefix = start_usn[:-3]
+    start_number = int(start_usn[-3:])
+    end_number = int(end_usn[-3:])
+
+    usn_list = [f"{prefix}{str(i).zfill(3)}" for i in range(start_number, end_number + 1)]
+
+    filename = 'results.xlsx'
+    
+    with open('5thcredits.json', 'r') as f:
         credit_points = json.load(f)
 
-    fetch_and_process_data(usn_list, "Results.xlsx", credit_points)
+    fetch_and_process_data(usn_list, filename, credit_points)
+
+    print("done")
 
 if __name__ == "__main__":
     main()
