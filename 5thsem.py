@@ -147,44 +147,14 @@ def process_and_save_data(data, filename, credit_points):
     print(f"Data saved to {filename}")
 
 def process_captcha(image_path):
-    # Load the image
-    img = cv2.imread(image_path)
-        
-    # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-    # Define the bounds for the color to be masked
-    lower = np.array([80])
-    upper = np.array([125])
-        
-    # Create the mask and apply it
-    mask = cv2.inRange(gray, lower, upper)
-    img[mask != 0] = [0]
-        
-    # Save the intermediate image (semisolved)
-    cv2.imwrite(r'./Captcha/semisolved.png', img)
-        
-    # Load the intermediate image
-    img = Image.open(r'./Captcha/semisolved.png')
-    pixels = img.load()
-        
-    # Change non-black pixels to white
-    for i in range(img.size[0]):
-        for j in range(img.size[1]):
-            if pixels[i, j] != (0, 0, 0):
-                pixels[i, j] = (255, 255, 255)
-    
-    # Save the final processed image (solved)
-    img.save(r'./Captcha/solved.png')
-        
-    # Read the processed image for OCR using OpenCV
-    img = cv2.imread(r'./Captcha/solved.png')
-        
-    # Perform OCR using pytesseract
+    captcha = Image.open(image_path)
+    captcha = captcha.convert("L")
+    threshold = 128
+    captcha = captcha.point(lambda p: p > threshold and 255)
+    captcha.save("processed_captcha.png")
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     config = r'--oem 1 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    captcha_text = pytesseract.image_to_string(img, config=config)
-        
+    captcha_text = pytesseract.image_to_string(captcha, config=config)
     return captcha_text.replace(" ", "").replace("\n", "")
 
 
@@ -202,9 +172,9 @@ def fetch_and_process_data(usn_list, filename, credit_points):
             element.send_keys(usn)
             
             captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""") #CAPTCHA PATH IS CORRRECT IMAGE COPY FULL XPATH
-            captcha_element.screenshot("./Captcha/captcha.png")
+            captcha_element.screenshot("captcha.png")
 
-            captcha_text = process_captcha("./Captcha/captcha.png")
+            captcha_text = process_captcha("captcha.png")
             print(f"Extracted Captcha Text: {captcha_text}")
 
             if len(captcha_text) != 6:
