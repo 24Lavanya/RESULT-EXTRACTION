@@ -11,7 +11,7 @@ from selenium.common.exceptions import NoAlertPresentException, TimeoutException
 import json
 
 # Correct path to the ChromeDriver executable
-chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = r"C:\Users\Lavanya\Downloads\chromedriver-win64 (1)\chromedriver-win64\chromedriver.exe"
 
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
@@ -170,7 +170,7 @@ def fetch_and_process_data(usn_list, filename, credit_points):
             element = driver.find_element(By.XPATH, """//*[@id="raj"]/div[1]/div/input""")
             element.send_keys(usn)
             
-            captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""") #CAPTCHA PATH IS CORRRECT IMAGE COPY FULL XPATH
+            captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""") #CAPTCHA FULL XPATH
             captcha_element.screenshot("captcha.png")
 
             captcha_text = process_captcha("captcha.png")

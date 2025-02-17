@@ -9,11 +9,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoAlertPresentException, TimeoutException
+from selenium.webdriver.common.alert import Alert
+from selenium.common.exceptions import NoAlertPresentException, TimeoutException,InvalidArgumentException,NoSuchElementException,UnexpectedAlertPresentException
 import json
 
 # Correct path to the ChromeDriver executable
-chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = r"C:\Users\Lavanya\Downloads\chromedriver-win64 (1)\chromedriver-win64\chromedriver.exe"
 
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
@@ -85,14 +86,29 @@ def calculate_grade_point(total_marks):
         return 4
 
 def classify_sgpa(percentage):
-    if percentage >= 70:
+    if percentage >= 69:
         return "Distinction"
-    elif 60 <= percentage < 70:
+    elif percentage >= 60:
         return "First Class"
-    elif 50 <= percentage < 60:
+    elif percentage >= 50:
         return "Second Class"
     else:
         return "Fail"
+
+def process_captcha(image_path):
+    captcha = Image.open(image_path)
+    captcha = captcha.convert("L")
+    threshold = 128
+    captcha = captcha.point(lambda p: p > threshold and 255)
+    captcha.save("processed_captcha.png")
+
+    # Change here to the path of teserract
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    config = r'--oem 1 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    captcha_text = pytesseract.image_to_string(captcha, config=config)
+    return captcha_text.replace(" ", "").replace("\n", "")
+
+
 
 def process_and_save_data(data, filename, credit_points):
     formatted_data = []
@@ -124,21 +140,23 @@ def process_and_save_data(data, filename, credit_points):
                 credit = int(credit_points[subject_code])
             else:
                 for key in credit_points.keys():
-                    if '/' in key:
-                        if subject_code in key.split('/'):
-                            credit = int(credit_points[key])
-                            subject_code = key
-                            break    
-            
+                    if '/' in key and subject_code in key.split('/'):
+                        credit = int(credit_points[key])
+                        break
+                else:
+                    credit = 0  # In case no match is found, default to zero
+
             total_credits += credit
             weighted_sum += gradepoint * credit
 
             if subject_code in ['BNSK359', 'BPEK359', 'BYOK359']:
-                unified_course_data['CIE'] = internal_marks
-                unified_course_data['SEE'] = external_marks
-                unified_course_data['Total'] = total_marks
-                unified_course_data['Grade'] = grade
-                unified_course_data['Grade Point'] = gradepoint
+                unified_course_data = {
+                    'CIE': internal_marks,
+                    'SEE': external_marks,
+                    'Total': total_marks,
+                    'Grade': grade,
+                    'Grade Point': gradepoint
+                }
             else:
                 formatted_row[f'{subject_code} CIE'] = internal_marks
                 formatted_row[f'{subject_code} SEE'] = external_marks
@@ -146,21 +164,29 @@ def process_and_save_data(data, filename, credit_points):
                 formatted_row[f'{subject_code} Grade'] = grade
                 formatted_row[f'{subject_code} Grade Point'] = gradepoint
 
-
             total_internal_marks += internal_marks
             total_external_marks += external_marks
             total_max_marks += 100
             external_marks_list.append(external_marks)
             internal_marks_list.append(internal_marks)
-    
 
-            sgpa = weighted_sum / total_credits
-            percentage = (sgpa - 0.75) * 10
+        # Store unified course data if it exists
+        if unified_course_data['Grade']:
+            formatted_row.update({
+                'Unified Course CIE': unified_course_data['CIE'],
+                'Unified Course SEE': unified_course_data['SEE'],
+                'Unified Course Total': unified_course_data['Total'],
+                'Unified Course Grade': unified_course_data['Grade'],
+                'Unified Course Grade Point': unified_course_data['Grade Point'],
+            })
 
-            if has_failed_subject:
-                class_result = 'Fail'
-            else:
-                class_result = classify_sgpa(percentage)
+        sgpa = weighted_sum / total_credits if total_credits else 0
+        percentage = ((sgpa - 0.75) * 10 if sgpa else 0)
+
+        if has_failed_subject:
+            class_result = 'Fail'
+        else:
+            class_result = classify_sgpa(percentage)
 
         formatted_row['SGPA'] = round(sgpa, 2)
         formatted_row['Percentage'] = round(percentage, 2)
@@ -197,48 +223,6 @@ def process_and_save_data(data, filename, credit_points):
     print(f"Data saved to {filename}")
 
 
-
-def process_captcha(image_path):
-    # Load the image
-    img = cv2.imread(image_path)
-
-    # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Define the bounds for the color to be masked
-    lower = np.array([80])
-    upper = np.array([125])
-
-    # Create the mask and apply it
-    mask = cv2.inRange(gray, lower, upper)
-    img[mask != 0] = [0]
-
-    # Save the intermediate image (semisolved)
-    cv2.imwrite(r'./Captcha/semisolved.png', img)
-
-    # Load the intermediate image
-    img = Image.open(r'./Captcha/semisolved.png')
-    pixels = img.load()
-
-    # Change non-black pixels to white
-    for i in range(img.size[0]):
-        for j in range(img.size[1]):
-            if pixels[i, j] != (0, 0, 0):
-                pixels[i, j] = (255, 255, 255)
-
-    # Save the final processed image (solved)
-    img.save(r'./Captcha/solved.png')
-
-    # Read the processed image for OCR using OpenCV
-    img = cv2.imread(r'./Captcha/solved.png')
-
-    # Perform OCR using pytesseract
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    config = r'--oem 1 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    captcha_text = pytesseract.image_to_string(img, config=config)
-
-    return captcha_text.replace(" ", "").replace("\n", "")
-
 def fetch_and_process_data(usn_list, filename, credit_points):
     all_data = []
     driver = webdriver.Chrome(service=service)
@@ -248,81 +232,88 @@ def fetch_and_process_data(usn_list, filename, credit_points):
         repeat = True
 
         while repeat:
-            driver.get("https://results.vtu.ac.in/DJcbcs24/index.php")
-            element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[1]/div/input""")
-            element.send_keys(usn)
-            
-            captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""") #CAPTCHA PATH IS CORRRECT IMAGE COPY FULL XPATH
-            captcha_element.screenshot("captcha.png")
-
-            captcha_text = process_captcha("captcha.png")
-            print(f"Extracted Captcha Text: {captcha_text}")
-
-            if len(captcha_text) != 6:
-                print("Captcha text length is not 6, retrying...")
-                continue
-
-            captcha_input = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[1]/input""")
-            
-            captcha_input.send_keys(captcha_text)
-
-            submit_button = driver.find_element(By.XPATH, """//*[@id="submit"]""")
-            submit_button.click()
-
             try:
-                alert = driver.switch_to.alert
-                if alert.text == "University Seat Number is not available or Invalid..!":
-                    alert.accept()
-                    repeat = False
-                    break
-                elif alert.text == "Invalid captcha code !!!":
-                    alert.accept()
+                driver.get("https://results.vtu.ac.in/DJcbcs24/index.php")
+                element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[1]/div/input""")
+                element.send_keys(usn)
+                
+                captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""") #CAPTCHA PATH IS CORRRECT IMAGE COPY FULL XPATH
+                captcha_element.screenshot("captcha.png")
+
+                captcha_text = process_captcha("captcha.png")
+                print(f"Extracted Captcha Text: {captcha_text}")
+
+                if len(captcha_text) != 6:
+                    print("Captcha text length is not 6, retrying...")
                     continue
-            except NoAlertPresentException:
-                pass
 
-            try:
-                element = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]'))  #SAME AS STUDENT USN CELL FULL XPATH
-                )                                               
-            except TimeoutException:
+                captcha_input = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[1]/input""")
+                
+                captcha_input.send_keys(captcha_text)
+
+                submit_button = driver.find_element(By.XPATH, """//*[@id="submit"]""")
+                submit_button.click()
+
+                try:
+                    WebDriverWait(driver, 3).until(EC.alert_is_present())
+                    alert = driver.switch_to.alert
+                    if "Invalid captcha code" in alert.text:
+                        print("Invalid captcha, retrying...")
+                        alert.accept()
+                        continue
+                    else:
+                            alert.accept()
+                            repeat = False
+                            break
+                except TimeoutException:
+                        pass  # No alert, continue
+
+                try:
+                    element = WebDriverWait(driver, 15).until(
+                        EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]'))  #SAME AS STUDENT USN CELL FULL XPATH
+                    )                                               
+                except TimeoutException:
+                    continue
+                
+                usn_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]')  
+
+                stud_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[2]/td[2]') # PANEL BODY-->TABLE-->2ND TR MEIN 2ND TD JAHA NAME HAI
+                                                            
+                table_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div')  #DIVTABLEBODY
+
+
+                # print("Stud",stud_element)
+                # print("usn",usn_element)
+                # print("table",table_element)                                          
+                #                                    
+                sub_elements = table_element.find_elements(By.XPATH, 'div')
+                num_sub_elements = len(sub_elements)
+                print("No of elements:",num_sub_elements) 
+                stud_text = stud_element.text
+                usn_text = usn_element.text
+                subjects = []
+                for i in range(2, num_sub_elements + 1):
+                    subject = {
+                        'Student Name': stud_text,
+                        'USN': usn_text,
+                        'Subject Code': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[1]').text,
+                        
+                        'Internal Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[3]').text,          #IN DIVTABLEROW WHERE THERE IS FIRST INTERNAL MARKS
+                                                                                        
+                        'External Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[4]').text,              #IN DIVTABLEROW WHERE THERE IS FIRST External MARKS
+                                                                    
+                        'Total Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[5]').text                  #IN DIVTABLEROW WHERE THERE IS FIRST total MARKS
+                    }
+                    subjects.append(subject)
+
+                print(f"Extracted subjects for USN {usn}: {subjects}")
+                all_data.extend(subjects)
+
+                repeat = False
+
+            except (NoSuchElementException, TimeoutException, UnexpectedAlertPresentException) as e:
+                print(f"Error: {e}, retrying...")
                 continue
-            
-            usn_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]')  
-
-            stud_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[2]/td[2]') # PANEL BODY-->TABLE-->2ND TR MEIN 2ND TD JAHA NAME HAI
-                                                        
-            table_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div')  #DIVTABLEBODY
-
-
-            # print("Stud",stud_element)
-            # print("usn",usn_element)
-            # print("table",table_element)                                          
-            #                                    
-            sub_elements = table_element.find_elements(By.XPATH, 'div')
-            num_sub_elements = len(sub_elements)
-            print("No of elements:",num_sub_elements) 
-            stud_text = stud_element.text
-            usn_text = usn_element.text
-            subjects = []
-            for i in range(2, num_sub_elements + 1):
-                subject = {
-                    'Student Name': stud_text,
-                    'USN': usn_text,
-                    'Subject Code': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[1]').text,
-                    
-                    'Internal Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[3]').text,          #IN DIVTABLEROW WHERE THERE IS FIRST INTERNAL MARKS
-                                                                                      
-                    'External Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[4]').text,              #IN DIVTABLEROW WHERE THERE IS FIRST External MARKS
-                                                                  
-                    'Total Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[5]').text                  #IN DIVTABLEROW WHERE THERE IS FIRST total MARKS
-                }
-                subjects.append(subject)
-
-            print(f"Extracted subjects for USN {usn}: {subjects}")
-            all_data.extend(subjects)
-
-            repeat = False
 
     driver.quit()
 
@@ -330,6 +321,108 @@ def fetch_and_process_data(usn_list, filename, credit_points):
         process_and_save_data(all_data, filename, credit_points)
     else:
         print("No data extracted, so no file created.")
+
+# def fetch_and_process_data(usn_list, filename, credit_points):
+#     all_data = []
+#     driver = webdriver.Chrome(service=service)
+
+#     for usn in usn_list:
+#         print(f"Currently trying to grab the results of {usn}")
+#         repeat = True
+
+#         while repeat:
+#             try:
+#                 driver.get("https://results.vtu.ac.in/DJcbcs24/index.php")
+#                 element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[1]/div/input""")
+#                 element.send_keys(usn)
+                
+#                 captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""")
+#                 captcha_element.screenshot("captcha.png")
+
+#                 captcha_text = process_captcha("captcha.png")
+#                 print(f"Extracted Captcha Text: {captcha_text}")
+
+#                 if len(captcha_text) != 6:
+#                     print("Captcha text length is not 6, retrying...")
+#                     continue
+
+#                 captcha_input = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[1]/input""")
+#                 captcha_input.send_keys(captcha_text)
+
+#                 submit_button = driver.find_element(By.XPATH, """//*[@id="submit"]""")
+#                 submit_button.click()
+
+#                 try:
+#                     alert = driver.switch_to.alert
+#                     if "Invalid captcha code" in alert.text:
+#                         print("Invalid captcha, retrying...")
+#                         alert.accept()
+#                         continue
+#                     else:
+#                         alert.accept()
+#                         repeat = False
+#                         break
+#                 except NoAlertPresentException:
+#                     pass
+
+#                 # Wait for results page to load
+#                 WebDriverWait(driver, 10).until(
+#                     EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]'))
+#                 )
+
+#                 usn_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]')  
+#                 stud_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[2]/td[2]')
+#                 table_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div')
+
+#                 stud_text = stud_element.text
+#                 usn_text = usn_element.text
+#                 subjects = []
+#                 sub_elements = table_element.find_elements(By.XPATH, 'div')
+#                 num_sub_elements = len(sub_elements)
+
+#                 for i in range(2, num_sub_elements + 1):
+#                     subject = {
+#                         'Student Name': stud_text,
+#                         'USN': usn_text,
+#                         'Subject Code': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[1]').text,
+#                         'Internal Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[3]').text,
+#                         'External Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[4]').text,
+#                         'Total Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[5]').text
+#                     }
+#                     subjects.append(subject)
+
+#                 print(f"Extracted subjects for USN {usn}: {subjects}")
+#                 all_data.extend(subjects)
+#                 repeat = False
+
+#             except NoSuchElementException as e:
+#                 print(f"Element not found: {e}")
+#                 repeat = True
+
+#             except InvalidArgumentException as e:
+#                 print(f"Invalid argument: {e}")
+#                 break
+
+#             except UnexpectedAlertPresentException as e:
+#                 print(f"Unexpected alert present: {e}")
+#                 alert = driver.switch_to.alert
+#                 alert.accept()
+#                 continue
+
+#             except TimeoutException:
+#                 print("Timed out waiting for page to load. Retrying...")
+#                 continue
+
+#     driver.quit()
+
+#     if all_data:
+#         process_and_save_data(all_data, filename, credit_points)
+#     else:
+#         print("No data extracted, so no file created.")
+
+        
+
+# Ensure the above functions `assign_grade`, `grade_point`, `classify_sgpa`, etc., are included in your script as before.
 
 def main():
     start_usn = input("Enter the starting USN (e.g., 4CB22CS001): ")

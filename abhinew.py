@@ -9,11 +9,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoAlertPresentException, TimeoutException
+from selenium.webdriver.common.alert import Alert
+from selenium.common.exceptions import NoAlertPresentException, TimeoutException,InvalidArgumentException,NoSuchElementException,UnexpectedAlertPresentException
 import json
 
 # Correct path to the ChromeDriver executable
-chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = r"C:\Users\Lavanya\Downloads\chromedriver-win64 (1)\chromedriver-win64\chromedriver.exe"
 
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
@@ -94,109 +95,6 @@ def classify_sgpa(percentage):
     else:
         return "Fail"
 
-def process_and_save_data(data, filename, credit_points):
-    formatted_data = []
-
-    for (student_name, usn), group in pd.DataFrame(data).groupby(['USN', 'Student Name']):
-        formatted_row = {'USN': usn.strip(': '), 'Student Name': student_name.strip(': ')}
-        total_credits = 0
-        weighted_sum = 0
-        total_internal_marks = 0
-        total_external_marks = 0
-        total_max_marks = 0
-        external_marks_list = []
-        internal_marks_list = []
-        has_failed_subject = False
-
-        unified_course_data = {'CIE': 0, 'SEE': 0, 'Total': 0, 'Grade': '', 'Grade Point': 0}
-        for subject_code in sorted(group['Subject Code'].unique()):
-            subject_group = group[group['Subject Code'] == subject_code]
-            internal_marks = int(subject_group['Internal Marks'].iloc[0])
-            external_marks = int(subject_group['External Marks'].iloc[0])
-            total_marks = int(subject_group['Total Marks'].iloc[0])
-            grade = assign_grade(subject_code, internal_marks, external_marks, total_marks)
-            gradepoint = grade_point(subject_code, internal_marks, external_marks, total_marks)
-
-            if grade == 'F':
-                has_failed_subject = True
-
-            if subject_code in credit_points:
-                credit = int(credit_points[subject_code])
-            else:
-                for key in credit_points.keys():
-                    if '/' in key:
-                        if subject_code in key.split('/'):
-                            credit = int(credit_points[key])
-                            subject_code = key
-                            break    
-            
-            total_credits += credit
-            weighted_sum += gradepoint * credit
-
-            if subject_code in ['BNSK359', 'BPEK359', 'BYOK359']:
-                unified_course_data['CIE'] = internal_marks
-                unified_course_data['SEE'] = external_marks
-                unified_course_data['Total'] = total_marks
-                unified_course_data['Grade'] = grade
-                unified_course_data['Grade Point'] = gradepoint
-            else:
-                formatted_row[f'{subject_code} CIE'] = internal_marks
-                formatted_row[f'{subject_code} SEE'] = external_marks
-                formatted_row[f'{subject_code} Total'] = total_marks
-                formatted_row[f'{subject_code} Grade'] = grade
-                formatted_row[f'{subject_code} Grade Point'] = gradepoint
-
-
-            total_internal_marks += internal_marks
-            total_external_marks += external_marks
-            total_max_marks += 100
-            external_marks_list.append(external_marks)
-            internal_marks_list.append(internal_marks)
-    
-
-            sgpa = weighted_sum / total_credits
-            percentage = (sgpa - 0.75) * 10
-
-            if has_failed_subject:
-                class_result = 'Fail'
-            else:
-                class_result = classify_sgpa(percentage)
-
-        formatted_row['SGPA'] = round(sgpa, 2)
-        formatted_row['Percentage'] = round(percentage, 2)
-        formatted_row['Class'] = class_result
-
-        formatted_data.append(formatted_row)
-
-    final_df = pd.DataFrame(formatted_data)
-
-    with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
-        final_df.to_excel(writer, index=False, sheet_name='Sheet1', startrow=1)
-
-        workbook = writer.book
-        worksheet = writer.sheets['Sheet1']
-
-        columns = ['USN', 'Student Name']
-        subject_codes = sorted({col.split(' ')[0] for col in final_df.columns if col.endswith('CIE')})
-        for subject_code in subject_codes:
-            columns.extend([subject_code, '', '', '', ''])
-        columns.extend(['SGPA', 'Percentage', 'Class'])
-
-        header1 = columns
-        header2 = [''] * 2 + ['CIE', 'SEE', 'Total', 'Grade', 'Grade Point'] * len(subject_codes) + ['', '', '']
-
-        for col_num, value in enumerate(header1):
-            worksheet.write(0, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
-
-        for col_num, value in enumerate(header2):
-            worksheet.write(1, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
-
-        for i in range(2, len(columns) - 3, 5):
-            worksheet.merge_range(0, i, 0, i+4, columns[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
-
-    print(f"Data saved to {filename}")
-
-
 
 def process_captcha(image_path):
     captcha = Image.open(image_path)
@@ -204,10 +102,15 @@ def process_captcha(image_path):
     threshold = 128
     captcha = captcha.point(lambda p: p > threshold and 255)
     captcha.save("processed_captcha.png")
+
+    # Change here to the path of teserract
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     config = r'--oem 1 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     captcha_text = pytesseract.image_to_string(captcha, config=config)
     return captcha_text.replace(" ", "").replace("\n", "")
+
+
+
 
 def fetch_and_process_data(usn_list, filename, credit_points):
     all_data = []
@@ -252,7 +155,7 @@ def fetch_and_process_data(usn_list, filename, credit_points):
                 pass
 
             try:
-                element = WebDriverWait(driver, 10).until(
+                element = WebDriverWait(driver, 20).until(
                     EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]'))  #SAME AS STUDENT USN CELL FULL XPATH
                 )                                               
             except TimeoutException:
@@ -301,9 +204,94 @@ def fetch_and_process_data(usn_list, filename, credit_points):
     else:
         print("No data extracted, so no file created.")
 
+        
+def process_and_save_data(data, filename, credit_points):
+    formatted_data = []
+
+    for (student_name, usn), group in pd.DataFrame(data).groupby(['Student Name', 'USN']):
+        formatted_row = {'USN': usn.strip(': '), 'Student Name': student_name.strip(': ')}
+        total_credits = 0
+        weighted_sum = 0
+        total_internal_marks = 0
+        total_external_marks = 0
+        total_max_marks = 0
+        has_failed_subject = False
+
+        for subject_code in sorted(group['Subject Code'].unique()):
+            subject_group = group[group['Subject Code'] == subject_code].iloc[0]
+            internal_marks = int(subject_group['Internal Marks'])
+            external_marks = int(subject_group['External Marks'])
+            total_marks = int(subject_group['Total Marks'])
+            grade = assign_grade(subject_code, internal_marks, external_marks, total_marks)
+            gradepoint = grade_point(subject_code, internal_marks, external_marks, total_marks)
+
+            if grade == 'F':
+                has_failed_subject = True
+
+            # Unified handling of subject codes
+            credit = credit_points.get(subject_code)
+            if not credit:
+                # Handle merged subject codes
+                for key, value in credit_points.items():
+                    if '/' in key and subject_code in key.split('/'):
+                        credit = value
+                        break
+            
+            if credit:
+                total_credits += int(credit)
+                weighted_sum += gradepoint * int(credit)
+            else:
+                print(f"Warning: Credit points for {subject_code} not found!")
+
+            # Add subject details to formatted_row
+            formatted_row[f'{subject_code} CIE'] = internal_marks
+            formatted_row[f'{subject_code} SEE'] = external_marks
+            formatted_row[f'{subject_code} Total'] = total_marks
+            formatted_row[f'{subject_code} Grade'] = grade
+            formatted_row[f'{subject_code} Grade Point'] = gradepoint
+
+            total_internal_marks += internal_marks
+            total_external_marks += external_marks
+            total_max_marks += 100
+
+        sgpa = weighted_sum / total_credits
+        percentage = (sgpa - 0.75) * 10
+        class_result = 'Fail' if has_failed_subject else classify_sgpa(percentage)
+
+        formatted_row['SGPA'] = round(sgpa, 2)
+        formatted_row['Percentage'] = round(percentage, 2)
+        formatted_row['Class'] = class_result
+
+        formatted_data.append(formatted_row)
+
+    final_df = pd.DataFrame(formatted_data)
+
+    with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+        final_df.to_excel(writer, index=False, sheet_name='Sheet1', startrow=1)
+
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
+
+        subject_codes = sorted({col.split(' ')[0] for col in final_df.columns if col.endswith('CIE')})
+        header1 = ['USN', 'Student Name'] + [subject_code for subject_code in subject_codes for _ in range(5)] + ['SGPA', 'Percentage', 'Class']
+        header2 = [''] * 2 + ['CIE', 'SEE', 'Total', 'Grade', 'Grade Point'] * len(subject_codes) + ['', '', '']
+
+        for col_num, value in enumerate(header1):
+            worksheet.write(0, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+
+        for col_num, value in enumerate(header2):
+            worksheet.write(1, col_num, value, workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+
+        for i in range(2, len(header1) - 3, 5):
+            worksheet.merge_range(0, i, 0, i + 4, header1[i], workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True}))
+
+    print(f"Data saved to {filename}")
+
+# Ensure the above functions assign_grade, grade_point, classify_sgpa, etc., are included in your script as before.
+
 def main():
-    start_usn = input("Enter the starting USN (e.g., 4CB21CS001): ")
-    end_usn = input("Enter the ending USN (e.g., 4CB21CS126): ")
+    start_usn = input("Enter the starting USN (e.g., 4CB22CS001): ")
+    end_usn = input("Enter the ending USN (e.g., 4CB22CS126): ")
 
     prefix = start_usn[:-3]
     start_number = int(start_usn[-3:])

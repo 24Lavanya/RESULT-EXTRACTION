@@ -9,11 +9,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoAlertPresentException, TimeoutException
+from selenium.common.exceptions import UnexpectedAlertPresentException
 import json
 
+from selenium.common.exceptions import TimeoutException, NoAlertPresentException
+import time
 # Correct path to the ChromeDriver executable
-chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = r"D:\Result-analysis\chromedriver-win64\chromedriver.exe"
 
 # Initialize the Chrome WebDriver with the correct service
 service = Service(executable_path=chrome_driver_path)
@@ -91,11 +93,10 @@ def process_and_save_data(data, filename, credit_points):
             grade = assign_grade(external_marks,total_marks)
             gradepoint = grade_point(external_marks,total_marks)
 
-
-            
             credit = int(credit_points[subject_code])
             total_credits += credit
             weighted_sum += gradepoint * credit
+
 
             formatted_row[f'{subject_code} CIE'] = internal_marks
             formatted_row[f'{subject_code} SEE'] = external_marks
@@ -146,20 +147,24 @@ def process_and_save_data(data, filename, credit_points):
 
     print(f"Data saved to {filename}")
 
-def process_captcha(image_path):
-    captcha = Image.open(image_path)
-    captcha = captcha.convert("L")
-    threshold = 128
-    captcha = captcha.point(lambda p: p > threshold and 255)
-    captcha.save("processed_captcha.png")
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    config = r'--oem 1 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    captcha_text = pytesseract.image_to_string(captcha, config=config)
-    return captcha_text.replace(" ", "").replace("\n", "")
+    def process_captcha(image_path):
+        captcha = Image.open(image_path)
+        captcha = captcha.convert("L")
+        threshold = 128
+        captcha = captcha.point(lambda p: p > threshold and 255)
+        captcha.save("processed_captcha.png")
+
+        # Change here to the path of teserract
+        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        config = r'--oem 1 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+        captcha_text = pytesseract.image_to_string(captcha, config=config)
+        return captcha_text.replace(" ", "").replace("\n", "")
+
 
 
 def fetch_and_process_data(usn_list, filename, credit_points):
     all_data = []
+    service = Service(chrome_driver_path)  # Update the path to your chromedriver
     driver = webdriver.Chrome(service=service)
 
     for usn in usn_list:
@@ -168,83 +173,91 @@ def fetch_and_process_data(usn_list, filename, credit_points):
 
         while repeat:
             driver.get("https://results.vtu.ac.in/DJcbcs24/index.php")
+
+            # Enter USN
             element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[1]/div/input""")
             element.send_keys(usn)
-            
-            captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""") #CAPTCHA PATH IS CORRRECT IMAGE COPY FULL XPATH
-            captcha_element.screenshot("captcha.png")
 
+            # Capture and process CAPTCHA
+            captcha_element = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[2]/img""")
+            captcha_element.screenshot("captcha.png")
             captcha_text = process_captcha("captcha.png")
             print(f"Extracted Captcha Text: {captcha_text}")
 
+            # Retry if CAPTCHA text length is invalid
             if len(captcha_text) != 6:
                 print("Captcha text length is not 6, retrying...")
                 continue
 
+            # Enter CAPTCHA
             captcha_input = driver.find_element(By.XPATH, """/html/body/div[2]/div[1]/div[2]/div/div[2]/form/div/div[2]/div[2]/div[1]/input""")
-            
             captcha_input.send_keys(captcha_text)
 
+            # Submit the form
             submit_button = driver.find_element(By.XPATH, """//*[@id="submit"]""")
             submit_button.click()
 
+            # Handle potential alerts
             try:
+                WebDriverWait(driver, 3).until(EC.alert_is_present())
                 alert = driver.switch_to.alert
-                if alert.text == "University Seat Number is not available or Invalid..!":
+                alert_text = alert.text
+                print(f"Alert detected: {alert_text}")
+                if "Invalid captcha code" in alert_text:
+                    alert.accept()
+                    continue
+                elif "University Seat Number is not available" in alert_text:
                     alert.accept()
                     repeat = False
                     break
-                elif alert.text == "Invalid captcha code !!!":
+                else:
                     alert.accept()
+                    print("Unexpected alert encountered. Retrying...")
                     continue
-            except NoAlertPresentException:
-                pass
-
-            try:
-                element = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]'))  #SAME AS STUDENT USN CELL FULL XPATH
-                )                                               
             except TimeoutException:
+                print("No alert present. Proceeding...")
+
+            # Wait for the results table to load
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]')
+                    )
+                )
+            except TimeoutException:
+                print("Results table did not load in time. Retrying...")
                 continue
-            
-            usn_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]')  
 
-            stud_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[2]/td[2]') # PANEL BODY-->TABLE-->2ND TR MEIN 2ND TD JAHA NAME HAI
-                                                        
-            table_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div')  #DIVTABLEBODY
+            # Extract student information
+            usn_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[1]/td[2]')
+            stud_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[1]/div/table/tbody/tr[2]/td[2]')
 
-
-            # print("Stud",stud_element)
-            # print("usn",usn_element)
-            # print("table",table_element)                                          
-            #                                    
+            # Extract subject-wise results
+            table_element = driver.find_element(By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div')
             sub_elements = table_element.find_elements(By.XPATH, 'div')
             num_sub_elements = len(sub_elements)
-            print("No of elements:",num_sub_elements) 
+
             stud_text = stud_element.text
             usn_text = usn_element.text
             subjects = []
+
             for i in range(2, num_sub_elements + 1):
                 subject = {
                     'Student Name': stud_text,
                     'USN': usn_text,
                     'Subject Code': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[1]').text,
-                    
-                    'Internal Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[3]').text,          #IN DIVTABLEROW WHERE THERE IS FIRST INTERNAL MARKS
-                                                                                      
-                    'External Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[4]').text,              #IN DIVTABLEROW WHERE THERE IS FIRST External MARKS
-                                                                  
-                    'Total Marks': driver.find_element(By.XPATH, f'//*[@id="dataPrint"]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[5]').text                  #IN DIVTABLEROW WHERE THERE IS FIRST total MARKS
+                    'Internal Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[3]').text,
+                    'External Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[4]').text,
+                    'Total Marks': driver.find_element(By.XPATH, f'/html/body/div[2]/div[2]/div[1]/div/div[2]/div[2]/div[1]/div/div/div[2]/div/div/div[2]/div/div[{i}]/div[5]').text,
                 }
                 subjects.append(subject)
-
             print(f"Extracted subjects for USN {usn}: {subjects}")
             all_data.extend(subjects)
-
             repeat = False
 
     driver.quit()
 
+    # Save data if extracted
     if all_data:
         process_and_save_data(all_data, filename, credit_points)
     else:
@@ -257,12 +270,13 @@ def main():
     prefix = start_usn[:-3]
     start_number = int(start_usn[-3:])
     end_number = int(end_usn[-3:])
-
+    
+    # Pads the string representation of i with leading zeros to ensure it is 3 characters long. For example, if i is 1, str(i).zfill(3) will be "001
     usn_list = [f"{prefix}{str(i).zfill(3)}" for i in range(start_number, end_number + 1)]
 
-    filename = 'results.xlsx'
+    filename = 'results.xlsx'     #Name of the excel file
     
-    with open('5thcredits.json', 'r') as f:
+    with open('5thcredits.json', 'r') as f:   #name of the credits file
         credit_points = json.load(f)
 
     fetch_and_process_data(usn_list, filename, credit_points)
