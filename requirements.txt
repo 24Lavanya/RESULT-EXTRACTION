@@ -1,0 +1,15 @@
+opencv-python 
+pytesseract
+pillow
+pandas
+selenium
+xlsxwriter
+
+# IGNORE THIS----------------------------------------------------------------
+# PLEASE CHANGE THE CREDITS IN THE JSON FILE FOR ANY BRANCH 
+# https://storage.googleapis.com/chrome-for-testing-public/127.0.6533.88/win64/chromedriver-win64.zip
+
+# DOWNLOAD THE CHROME DRIVER RELAVANT TO YOUR CHROME VERSION 
+# --https://googlechromelabs.github.io/chrome-for-testing/#stable  
+# Choose a VERSION
+# Copy path of .exe in it and paste it
